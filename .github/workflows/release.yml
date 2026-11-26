@@ -1,0 +1,82 @@
+name: Build & Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Ensure Android SDK 34 and Build-Tools 34.0.0
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses >/dev/null || true
+            "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
+          fi
+
+      - name: Run unit tests and assemble APK
+        run: |
+          chmod +x gradlew
+          ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" testDebugUnitTest assembleDebug --no-daemon
+
+      - name: Prepare release APK asset
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          fi
+          APK_NAME="XingceSpeedMath-${TAG}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$APK_NAME"
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "APK_NAME=$APK_NAME" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES=$(cat <<'EOF'
+          ## 行测速算 Release
+
+          ### 主要特性
+          - 晴空蓝白 3-Tab 现代界面（速算 / 公式 / 统计）
+          - 17 种行测资料分析预设题型 + 自定义出题 + `BigDecimal` 三档相对误差判题（`±1% / ±2% / ±5%`）
+          - 自定义 4×4 悬浮白键帽三态键盘（正序 / 倒序 / 乱序）+ 蓝点阵手写草稿画布 + N-back 训练
+          - 独立「公式本」（预置 30 条行测高频公式，支持本地增删改查/搜索/收藏）+ 百化分/年均 `(1+r)ⁿ`/平方/易错概念速查
+          - 练习报告环形仪表盘、逐题复盘、错题重练与按日历史统计
+          - 真实导出 A4 PDF 打印卷、高清长图（直存相册）与纯文本练习卷
+
+          ### 安装说明
+          下载下方 `XingceSpeedMath-*.apk` 直接安装到 Android 8.0+ 设备即可离线使用。
+          EOF
+          )
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK_NAME" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$APK_NAME" \
+              --title "行测速算 ${RELEASE_TAG}" \
+              --notes "$NOTES"
+          fi

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">行测速算</string>
+    <string name="practice_preferences_title">练习偏好</string>
+    <string name="practice_preferences_summary">%1$d 题 · %2$s</string>
+    <string name="loading_practice_preferences">正在读取练习偏好…</string>
+    <string name="built_in_formulas_title">预置公式</string>
+    <string name="built_in_formulas_count">%1$d 条</string>
+    <string name="loading_built_in_formulas">正在初始化公式…</string>
+</resources>
